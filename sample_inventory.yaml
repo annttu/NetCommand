@@ -1,0 +1,26 @@
+opts:
+  username: admin
+  password: password
+  # or
+  # ssh_key: ~/.ssh/id_rsa
+groups:
+  downstairs:
+    opts:
+      model: routeros
+    hosts:
+      switch2:
+        hostname: 192.168.1.2
+      switch3:
+        hostname: 192.168.1.3
+  upstairs:
+    hosts:
+      switch4:
+        hostname: 192.168.1.4
+      switch5:
+        hostname: 192.168.1.5
+
+sources:
+  example.net:
+    type: http
+  ~/Downloads:
+    type: local

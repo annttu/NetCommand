@@ -1,2 +1,4 @@
 /*.yaml
 /*.txt
+!sample_inventory.yaml
+!requirements.txt
