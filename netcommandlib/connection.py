@@ -46,6 +46,10 @@ class Connection(object):
     def expect_disconnect(self):
         raise NotImplemented()
 
+    @abstractmethod
+    def get_address(self):
+        raise NotImplemented()
+
 
 cli_errors = [
     'expected end of command (',
@@ -302,6 +306,8 @@ class SSHConnection(Connection):
             self.reset_prompt()
         self._at_prompt = False
 
+    def get_address(self):
+        return self.address
 
 def connection_from_opts(opts):
     kwargs = {

@@ -126,12 +126,11 @@ def command(args, hostname, opts, image_providers, dry_run=False):
 
     logger.info(f"Executing commands: {commands}")
 
-    for command in commands:
-        logger.info(f"Executing command: {commands}")
-        if not dry_run:
-            logger.info(model.execute(command))
-        else:
-            logger.info("DRY RUN")
+    if not dry_run:
+        logger.info(model.execute_block(commands))
+    else:
+        logger.info("DRY RUN")
+
     result["status"] = "SUCCESS"
     return result
 
@@ -146,7 +145,7 @@ def main():
     parser.add_argument("-C", "--check", help="Check mode, don't make changes", default=False, action="store_true")
     parser.add_argument("inventory", help="Inventory file")
 
-    subparsers = parser.add_subparsers(help='actions')
+    subparsers = parser.add_subparsers(help='actions', required=True)
     update_parser = subparsers.add_parser("update")
     command_parser = subparsers.add_parser("command")
     version_parser = subparsers.add_parser("version")

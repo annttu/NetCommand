@@ -24,7 +24,7 @@ def get_tabular_data(data, header, delimiter=" ", skip_after_header=1):
     out = []
     split_pattern = "\\s*" + delimiter + "\\s*"
     for row in data.splitlines():
-        parts = re.split(split_pattern, row)
+        parts = [x.strip() for x in re.split(split_pattern, row.strip())]
         if not header_found:
             if parts == header:
                 header_found = True

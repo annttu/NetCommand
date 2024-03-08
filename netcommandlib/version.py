@@ -59,6 +59,9 @@ def compare_version_old(a, b):
 
 
 def compare_version(a, b):
+    """
+    Returns 1 if a is bigger than b, 0 if same and -1 if b is bigger than a
+    """
     a = a.strip().split("-")[0]
     b = b.strip().split("-")[0]
     a_parts = [int(x) for x in a.split(".")]

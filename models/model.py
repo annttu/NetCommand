@@ -7,6 +7,9 @@ class Model(object):
 
     PROMPT = ">"
 
+    def get_username(self, username):
+        return username
+
     @abstractmethod
     def get_platform(self):
         """
@@ -47,11 +50,15 @@ class Model(object):
         raise NotImplemented
 
     @abstractmethod
-    def execute(self, commands):
+    def execute(self, command):
         """
-        Execute commands
+        Execute command
         """
         raise NotImplemented
+
+    def execute_block(self, commands):
+        for command in commands:
+            self.execute(command)
 
     @abstractmethod
     def get_upgrade_package_name(self, version):
