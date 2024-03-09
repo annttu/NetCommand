@@ -15,6 +15,29 @@ from netcommandlib.version import compare_version
 logger = logging.getLogger("RouterOS")
 
 
+
+cli_errors = [
+    'expected end of command (',
+    'bad command name',
+    'input does not match any value of',
+    'syntax error (',
+    'expected command name',
+    'invalid internal item number',
+    'failure: ',
+    'max line length 65535 exceeded!',
+    'expected closing',
+    'no such item',
+    'value of passphrase should not be shorter than',
+    'invalid value ',
+]
+
+cli_duplicate_warnings = [
+    'failure: already have',
+]
+
+cli_warnings = []
+
+
 class RouterOS(Model):
     extra_packages = [
         "calea",
@@ -41,16 +64,16 @@ class RouterOS(Model):
         return f"{username}+ct511w4098h"
 
     def get_platform(self):
-        stdout = self.connection.command("/system resource print")
+        stdout = self.command("/system resource print")
         return get_vertical_data_row(stdout, 'architecture-name')
 
     def get_software_version(self):
-        stdout = self.connection.command("/system resource print")
+        stdout = self.command("/system resource print")
         return get_vertical_data_row(stdout, 'version').split(None, 1)[0].strip()
 
     def get_firmware_version(self):
         try:
-            stdout = self.connection.command("/system routerboard print")
+            stdout = self.command("/system routerboard print")
             return get_vertical_data_row(stdout, 'current-firmware')
         except CommandError:
             # Non routerboard device
@@ -58,7 +81,7 @@ class RouterOS(Model):
 
     def get_firmware_type(self):
         try:
-            stdout = self.connection.command("/system routerboard print")
+            stdout = self.command("/system routerboard print")
             return get_vertical_data_row(stdout, 'firmware-type')
         except CommandError:
             return None
@@ -71,7 +94,29 @@ class RouterOS(Model):
         return
 
     def execute(self, command):
-        return self.connection.command(command)
+        return self.command(command)
+
+    def command(self, command, ignore_errors=False, ignore_warnings=False, ignore_duplicate=False):
+        (stdout, stderr) = self.connection.run(command)
+
+        if not ignore_errors:
+            if stderr:
+                raise CommandError("SSH returned error: %s" % (stderr,))
+            for exception in cli_errors:
+                if exception in stdout:
+                    raise CommandError("SSH returned error: %s" % (stdout,))
+            if not ignore_warnings or not ignore_duplicate:
+                for warning in cli_warnings:
+                    if warning in stdout:
+                        raise CommandError("SSH returned warning: %s" % (stdout,))
+            if not ignore_duplicate:
+                for warning in cli_duplicate_warnings:
+                    if warning in stdout:
+                        raise CommandError("SSH returned duplication warning: %s" % (stdout,))
+        if 'input does not match ' in stdout:
+            raise CommandError("SSH returned error %s" % (stdout,))
+        logger.debug("SSH:\n%s", stdout)
+        return stdout
 
     def execute_block(self, commands):
         out = ""
@@ -96,7 +141,7 @@ class RouterOS(Model):
         """
         current_version = self.get_software_version()
         firmware_type = self.get_firmware_type()
-        data = self.connection.command("/system package print")
+        data = self.command("/system package print")
         packages = parsers.get_tabular_data(
             data,
             header=["#", "NAME", "VERSION", "BUILD-TIME", "SIZE"],
@@ -136,7 +181,7 @@ class RouterOS(Model):
                     idx += 1
                 else:
                     # We need a wireless package if we have wlan interfaces
-                    interface_raw_data = self.connection.command("/interface print detail")
+                    interface_raw_data = self.command("/interface print detail")
                     if 'type="wlan"' in interface_raw_data:
                         extra_packages.append({"NAME": "wireless", "VERSION": current_version})
         return extra_packages
@@ -179,7 +224,7 @@ class RouterOS(Model):
 
     def upgrade_firmware(self):
         try:
-            stdout = self.connection.command("/system routerboard print")
+            stdout = self.command("/system routerboard print")
             current_firmware = get_vertical_data_row(stdout, 'current-firmware')
             upgrade_firmware = get_vertical_data_row(stdout, 'upgrade-firmware')
         except CommandError:
@@ -192,7 +237,7 @@ class RouterOS(Model):
             # Wait for "Firmware upgraded successfully, please reboot for changes to take effect!" text
             for i in range(5):
                 time.sleep(5)
-                stdout = self.connection.command("/system routerboard print")
+                stdout = self.command("/system routerboard print")
                 if 'please reboot' in stdout:
                     break
             else:
@@ -206,7 +251,7 @@ class RouterOS(Model):
             self.connection.expect_disconnect()
 
             # Check current-firmware is same as upgrade-firmware after upgrade
-            stdout = self.connection.command("/system routerboard print")
+            stdout = self.command("/system routerboard print")
             current_firmware = get_vertical_data_row(stdout, 'current-firmware')
             upgrade_firmware = get_vertical_data_row(stdout, 'upgrade-firmware')
 

@@ -28,12 +28,15 @@ def get_model(hostname: str, opts: Dict) -> Union[Model, None]:
     if model_name not in models.MODELS:
         logger.error(f"Host {hostname} model {model_name} is not supported")
         return None
-    kwargs = connection_from_opts(opts)
 
-    kwargs["prompt"] = models.MODELS[model_name].PROMPT
-    connection = SSHConnection(**kwargs)
+    if "prompt" not in opts:
+        opts["prompt"] = models.MODELS[model_name].PROMPT
+
+    connection = connection_from_opts(opts, login_dialog=models.MODELS[model_name].login_dialog)
 
     model = models.MODELS[model_name](connection=connection)
+
+    # connection.connect()
     return model
 
 

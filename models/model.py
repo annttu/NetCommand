@@ -32,6 +32,10 @@ class Model(object):
         """
         raise NotImplemented
 
+    @staticmethod
+    def login_dialog(username, password):
+        raise NotImplemented
+
     @abstractmethod
     def save_config(self):
         """

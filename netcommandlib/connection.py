@@ -23,11 +23,11 @@ class Connection(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def run(self, command):
+    def run(self, command, timeout=5):
         raise NotImplemented()
 
     @abstractmethod
-    def command(self, command):
+    def run_interactive(self, command, timeout=5, row_callback=None, end_of_line=None):
         raise NotImplemented()
 
     @abstractmethod
@@ -43,6 +43,10 @@ class Connection(object):
         raise NotImplemented()
 
     @abstractmethod
+    def connect(self):
+        raise NotImplemented()
+
+    @abstractmethod
     def expect_disconnect(self):
         raise NotImplemented()
 
@@ -51,33 +55,225 @@ class Connection(object):
         raise NotImplemented()
 
 
-cli_errors = [
-    'expected end of command (',
-    'bad command name',
-    'input does not match any value of',
-    'syntax error (',
-    'expected command name',
-    'invalid internal item number',
-    'failure: ',
-    'max line length 65535 exceeded!',
-    'expected closing',
-    'no such item',
-    'value of passphrase should not be shorter than',
-    'invalid value ',
-]
-
-cli_duplicate_warnings = [
-    'failure: already have',
-]
-
-cli_warnings = []
-
 class Actions(Enum):
     BREAK = "break"
 
 
+def cli_run_interactive(send_function, receive_function, binary_command, prompt, timeout=5, row_callback=None):
+    send_function(binary_command)
+    return wait_prompt_with_callback(
+        send_function,
+        receive_function,
+        prompt,
+        timeout=timeout,
+        row_callback=row_callback,
+        min_input_length=len(binary_command) + 1
+    )
+
+
+def wait_prompt_with_callback(
+        send_function,
+        receive_function,
+        prompt,
+        timeout=5,
+        row_callback=None,
+        min_input_length=0,
+        encoding="utf-8"
+    ):
+    at_prompt = False
+    data = ""
+    times_sleep = 0
+    while True:
+        logger.debug(f"Data received: {data}")
+        new_data = receive_function(8192)
+        if new_data:
+            data += new_data.decode(encoding, errors="ignore")
+        else:
+            # break
+            time.sleep(1)
+            times_sleep += 1
+            if times_sleep > timeout:
+                raise TimeoutError
+            logger.debug(f"No new data received")
+            continue
+        if len(data) > min_input_length:
+            if data.endswith(prompt) or data.endswith(prompt + " "):
+                at_prompt = True
+                break
+            elif row_callback:
+                break_out = False
+                for row in data.strip().splitlines():
+                    action = row_callback(row)
+                    logger.debug(f"Row '{row}' callback action {action}")
+                    if action == Actions.BREAK:
+                        break_out = True
+                        break
+                    elif isinstance(action, str):
+                        #if not action.endswith("\n"):
+                        #    action += "\n"
+                        send_function(action.encode(encoding))
+                if break_out:
+                    break
+    # Strip prompts from data
+    if at_prompt:
+        data = data[min_input_length:data.rfind("\n")]
+    logger.debug(f"Input data:\n{data}")
+    return data, at_prompt
+
+
+class TelnetConnection(Connection):
+    """
+    TODO: Support for Telnet NVT and control character processing
+    """
+
+    def __init__(self, address, username="admin", password="", port=23, prompt=">", login_dialog=None):
+        self.address = address
+        self.port = port
+        self._username = username
+        self._password = password
+        self._connection = None
+        self._login_dialog = login_dialog
+        self.prompt = prompt
+        self._initial_prompt = prompt
+        self._at_prompt = False
+        self._channel = None
+        self.end_of_line = "\r\n"
+        self.encoding = "utf-8"
+
+    @property
+    def channel(self):
+        if not self._channel:
+            self.connect()
+        return self._channel
+
+    def connect(self):
+        logger.info(f"Connecting to {self.address}:{self.port}")
+        res = socket.getaddrinfo(self.address, self.port, socket.AF_INET, socket.SOCK_STREAM)
+        if len(res) < 1:
+            logger.critical(f"Failed to resolve connection for {self.address}:{self.port}")
+            raise ConnectionError(f"Failed to resolve connection for {self.address}:{self.port}")
+        af, socket_type, proto, canonical_name, sa = res[0]
+        if len(res) > 1:
+            logger.warning(f"Got more than one result from DNS, using first: {sa}")
+        try:
+            self._channel = socket.socket(af, socket.SOCK_STREAM)
+        except OSError:
+            logger.exception("Failed to open socket")
+            self._channel = None
+            raise ConnectionError("Failed to open socket")
+        try:
+            self.set_timeout(30)
+            self._channel.connect(sa)
+            logger.info(f"Connected to {self.address}:{self.port}")
+            self.set_timeout(None)
+        except OSError:
+            self._channel.close()
+            self._channel = None
+            raise ConnectionError("Failed to open connection")
+        if self._login_dialog:
+            self.set_timeout(30)
+            # self._send(self.end_of_line.encode("utf-8"))
+            data, self._at_prompt = wait_prompt_with_callback(
+                self._send,
+                self._receive,
+                prompt=self.prompt,
+                timeout=30,
+                row_callback=self._login_dialog(self._username, self._password),
+                min_input_length=1,
+            )
+            self.set_timeout(None)
+            if not self._at_prompt:
+                # login failed?
+                raise RuntimeError("Login failed, login process didn't end up in prompt")
+        else:
+            raise RuntimeError("No way to login, please check model's login_dialog function")
+
+    def run(self, command, timeout=5):
+        return self.run_interactive(command, timeout=timeout)
+
+    def run_interactive(self, command, timeout=5, row_callback=None, end_of_line=None):
+        if not end_of_line:
+            end_of_line = self.end_of_line
+        end_of_line = end_of_line.encode(self.encoding)
+        logger.debug("Telnet Interactive Command: %s", command)
+        self._wait_prompt(timeout=timeout)
+        binary_command = command.encode(self.encoding)
+
+        self.set_timeout(timeout)
+        data, self._at_prompt = cli_run_interactive(
+            self._send,
+            self._receive,
+            binary_command + end_of_line,
+            self.prompt,
+            timeout=timeout,
+            row_callback=row_callback
+        )
+        self.set_timeout(None)
+        return data
+
+    def upload_file(self, buffer, filename):
+        raise NotImplemented()
+
+    def close(self):
+        if self._channel:
+            self._channel.close()
+
+    def reopen(self):
+        if self._channel:
+            self._channel.close()
+        self._connect()
+
+    def expect_disconnect(self):
+        self.close()
+        time.sleep(5)
+        self.reopen()
+
+    def _send(self, command):
+        logger.debug(f"Raw output: {command}")
+        self._channel.sendall(command)
+
+    def _receive(self, nbytes):
+        data = self._channel.recv(nbytes)
+        logger.debug(f"Raw input: {data}")
+        return data
+
+    def _wait_prompt(self, timeout=5, prompt=None):
+        if self._at_prompt:
+            return
+        data = ""
+        if not prompt:
+            prompt = self.prompt
+        logger.debug(f"Waiting for prompt '{prompt}'")
+        self.set_timeout(timeout)
+        while True:
+            char = self.channel.recv(len(self.prompt))
+            if len(char) == 0:
+                time.sleep(0.1)
+                continue
+            data += char.decode(self.encoding, errors="replace")
+            logger.debug(f"prompt data {data.encode(self.encoding)}")
+            if data.endswith(prompt) or data.endswith(prompt + " "):
+                break
+        self.set_timeout(None)
+        self._at_prompt = True
+        logger.debug(f"prompt: '{data.encode(self.encoding)}'")
+
+    def set_timeout(self, timeout):
+        self.channel.settimeout(timeout)
+
+
 class SSHConnection(Connection):
-    def __init__(self, address, username="admin", password="", key_filename=None, key_password=None, port=22, prompt=">"):
+    def __init__(
+            self,
+            address,
+            username="admin",
+            password="",
+            key_filename=None,
+            key_password=None,
+            port=22,
+            prompt=">",
+            login_dialog=None
+    ):
         self.address = address
         self.port = port
         self._username = username
@@ -95,12 +291,12 @@ class SSHConnection(Connection):
             del os.environ['SSH_AUTH_SOCK']
 
         logger.debug("Opening SSH connection to %s@%s" % (username, address))
-        self._connection = self._connect()
+        self.connect()
 
     @property
     def connection(self):
         if not self._connection:
-            self._connection = self._connect()
+            self.connect()
         return self._connection
 
     def _connect(self):
@@ -147,6 +343,9 @@ class SSHConnection(Connection):
         logger.debug("New SSH connection to %s@%:%d is now open", self._username, self.address, self.port)
         return connection
 
+    def connect(self):
+        self._connection = self._connect()
+
     @property
     def sftp(self):
         if not self._sftp:
@@ -162,28 +361,6 @@ class SSHConnection(Connection):
         stderr = response[2].read().decode("utf-8")
         stdout = response[1].read().decode("utf-8")
         return stdout, stderr
-
-    def command(self, command, ignore_errors=False, ignore_warnings=False, ignore_duplicate=False):
-        (stdout, stderr) = self.run(command)
-
-        if not ignore_errors:
-            if stderr:
-                raise CommandError("SSH returned error: %s" % (stderr,))
-            for exception in cli_errors:
-                if exception in stdout:
-                    raise CommandError("SSH returned error: %s" % (stdout,))
-            if not ignore_warnings or not ignore_duplicate:
-                for warning in cli_warnings:
-                    if warning in stdout:
-                        raise CommandError("SSH returned warning: %s" % (stdout,))
-            if not ignore_duplicate:
-                for warning in cli_duplicate_warnings:
-                    if warning in stdout:
-                        raise CommandError("SSH returned duplication warning: %s" % (stdout,))
-        if 'input does not match ' in stdout:
-            raise CommandError("SSH returned error %s" % (stdout,))
-        logger.debug("SSH:\n%s", stdout)
-        return stdout
 
     def close(self):
         self.connection.close()
@@ -218,6 +395,24 @@ class SSHConnection(Connection):
             self._channel = self.connection.invoke_shell()
         return self._channel
 
+    def set_timeout(self, timeout):
+        self.channel.settimeout(timeout)
+
+    def _receive(self, nbytes):
+        data = b""
+        if self.channel.recv_ready():
+            time.sleep(0.2)
+            new_data = self.channel.recv(nbytes=nbytes)
+            data += new_data
+        elif self.channel.recv_stderr_ready():
+            time.sleep(0.2)
+            new_data = self.channel.recv_stderr(nbytes=nbytes)
+            data += new_data
+        return data
+
+    def _send(self, data):
+        return self.channel.sendall(data)
+
     def _wait_prompt(self, timeout=5, prompt=None):
         if self._at_prompt:
             return
@@ -225,14 +420,14 @@ class SSHConnection(Connection):
         if not prompt:
             prompt = self.prompt
         logger.debug(f"Waiting for prompt '{prompt}'")
-        self.channel.settimeout(timeout)
+        self.set_timeout(timeout)
         while True:
             char = self.channel.recv(nbytes=len(self.prompt))
             data += char.decode("utf-8")
             logger.debug(f"prompt data {data.encode('utf-8')}")
             if data.endswith(prompt) or data.endswith(prompt + " "):
                 break
-        self.channel.settimeout(None)
+        self.set_timeout(None)
         self._at_prompt = True
         logger.debug(f"prompt: '{data.encode('utf-8')}'")
 
@@ -248,65 +443,18 @@ class SSHConnection(Connection):
         end_of_line = end_of_line.encode("utf-8")
         logger.debug("SSH Interactive Command: %s", command)
         self._wait_prompt(timeout=timeout)
-        self.channel.settimeout(timeout)
+        self.set_timeout(timeout)
         binary_command = command.encode("utf-8")
-        self.channel.sendall(binary_command + end_of_line)
-        self._at_prompt = False
-        # wait until we see what we typed
-        #logger.debug("Waiting for command echo")
-        # data = b""
-        # while True:
-        #     data += self.channel.recv(nbytes=1)
-        #     logger.debug(f"echo data: {data}")
-        #     if binary_command in data:
-        #         break
-        # logger.debug("Actual command echoed: %s" % data)
-        data = b""
-        times_sleep = 0
-        while True:
-            logger.debug(f"Data received: {data}")
-            new_data = b''
-            if self.channel.recv_ready():
-                time.sleep(0.2)
-                new_data = self.channel.recv(nbytes=8192)
-                data += new_data
-            elif self.channel.recv_stderr_ready():
-                time.sleep(0.2)
-                new_data = self.channel.recv_stderr(nbytes=8192)
-                data += new_data
-            else:
-                # break
-                time.sleep(1)
-                times_sleep += 1
-                if times_sleep > timeout:
-                    raise TimeoutError
-                logger.debug(f"No new data received")
-                continue
-            if len(data) > len(command) + 1:
-                if data.endswith(self.prompt.encode("utf-8")) or data.endswith(self.prompt.encode("utf-8") + b" "):
-                    self._at_prompt = True
-                    break
-                elif row_callback:
-                    break_out = False
-                    for row in new_data.decode("utf-8").strip().splitlines():
-                        action = row_callback(row)
-                        if action == Actions.BREAK:
-                            break_out = True
-                            break
-                        elif isinstance(action, str):
-                            if not action.endswith("\n"):
-                                action += "\n"
-                            action = action.encode("utf-8")
-                            self.channel.sendall(action)
-                    if break_out:
-                        break
 
-        self.channel.settimeout(None)
-        data = data.decode("utf-8")
-        # Strip prompts from data
-        if self._at_prompt:
-            data = data[len(command) + 1:data.rfind("\n")]
-        logger.debug("Data for command %s:\n%s" % (command, data))
+        data, self._at_prompt = cli_run_interactive(
+            self._send,
+            self._receive,
+            binary_command + end_of_line,
+            self.prompt,
+            row_callback=row_callback
+        )
+        self.set_timeout(None)
+
         return data
 
     def close_channel(self):
@@ -319,18 +467,28 @@ class SSHConnection(Connection):
     def get_address(self):
         return self.address
 
-def connection_from_opts(opts):
+def connection_from_opts(opts, login_dialog=None):
+    method = 'ssh'
     kwargs = {
         'address': opts["hostname"],
+        'login_dialog': login_dialog,
     }
     for key, value in {'password': "password", 'username': "username", 'port': "port",
-                       "ssh_key_password": 'key_password'}.items():
+                       "ssh_key_password": 'key_password', 'prompt': 'prompt'}.items():
         if key in opts:
             kwargs[value] = opts[key]
     for key, value in {"ssh_key": 'key_filename'}.items():
         if key in opts:
             kwargs[value] = os.path.expanduser(opts[key])
-    return kwargs
+
+    if 'method' in opts:
+        method = opts['method']
+
+    if method == 'ssh':
+        return SSHConnection(**kwargs)
+    elif method == 'telnet':
+        return TelnetConnection(**kwargs)
+    raise ValueError(f"Invalid method {method}")
 
 
 def check_connection(address, port=22):
