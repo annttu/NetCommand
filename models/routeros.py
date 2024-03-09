@@ -29,6 +29,9 @@ class RouterOS(Model):
         "user-manager",
         "wifiwave2",
         "zerotier",
+        "wireless",
+        "wifi-qcom",
+        "wifi-qcom-ac",
     ]
 
     def __init__(self, connection: Connection):
@@ -52,6 +55,13 @@ class RouterOS(Model):
         except CommandError:
             # Non routerboard device
             return self.get_software_version()
+
+    def get_firmware_type(self):
+        try:
+            stdout = self.connection.command("/system routerboard print")
+            return get_vertical_data_row(stdout, 'firmware-type')
+        except CommandError:
+            return None
 
     def get_supported_image_provider_types(self):
         return ["local"]
@@ -79,7 +89,13 @@ class RouterOS(Model):
             out += (self.execute("{ " + buffer + ' }'))
         return out
 
-    def get_extra_packages(self):
+    def get_extra_packages(self, version):
+        """
+        TODO: Wifiwave2 package has been replaced in 7.13 with wifi-qcom and wifi-qcom-ac packages.
+        TODO: Devices with wlan interface need wireless package starting from version 7.13
+        """
+        current_version = self.get_software_version()
+        firmware_type = self.get_firmware_type()
         data = self.connection.command("/system package print")
         packages = parsers.get_tabular_data(
             data,
@@ -102,7 +118,28 @@ class RouterOS(Model):
             )
         if not packages:
             raise RuntimeError("Failed to get installed packages")
-        return [x for x in packages if x["NAME"] in self.extra_packages]
+        extra_packages = [x for x in packages if x["NAME"] in self.extra_packages]
+        if firmware_type:
+            if compare_version(current_version, "7.13") < 0 and compare_version(version, "7.13") >= 0:
+                idx = 0
+                for package in extra_packages:
+                    if package["NAME"] == "wifiwave2":
+                        del extra_packages[idx]
+                        if firmware_type.startswith("ipq40"):
+                            extra_packages.append({"NAME": "wifi-qcom-ac", "VERSION": current_version})
+                        elif firmware_type.startswith("ipq60"):
+                            extra_packages.append({"NAME": "wifi-qcom", "VERSION": current_version})
+                        else:
+                            logger.warning(f"Don't know replacement for wifiwave2 package for {firmware_type}")
+                            raise NotImplemented(f"Don't know replacement for wifiwave2 package for {firmware_type}")
+                        break
+                    idx += 1
+                else:
+                    # We need a wireless package if we have wlan interfaces
+                    interface_raw_data = self.connection.command("/interface print detail")
+                    if 'type="wlan"' in interface_raw_data:
+                        extra_packages.append({"NAME": "wireless", "VERSION": current_version})
+        return extra_packages
 
     def upgrade(self, image: GenericImage, extra_images: List[GenericImage]):
         # TODO: Check for extra packages!
@@ -181,7 +218,11 @@ class RouterOS(Model):
         return f"routeros-{version}-{self.get_platform()}.npk"
 
     def get_extra_package_names(self, version):
+        """
+        :param version: New version
+        :return: list of extra packages
+        """
         data = []
-        for package in self.get_extra_packages():
+        for package in self.get_extra_packages(version):
             data.append(f"{package['NAME']}-{version}-{self.get_platform()}.npk")
         return data

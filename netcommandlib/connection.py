@@ -104,7 +104,7 @@ class SSHConnection(Connection):
         return self._connection
 
     def _connect(self):
-        logger.debug(f"Opening new SSH connection to {self._username}@{self.address}")
+        logger.debug(f"Opening new SSH connection to {self._username}@{self.address}:{self.port}")
         connection = paramiko.SSHClient()
         if os.path.isfile(os.path.expanduser('~/.ssh/known_hosts')):
             connection.load_host_keys(os.path.expanduser('~/.ssh/known_hosts'))
@@ -139,8 +139,12 @@ class SSHConnection(Connection):
         else:
             kwargs['password'] = self._password
         logger.debug("KWARGS %s" % (kwargs,))
-        connection.connect(self.address, timeout=30, **kwargs)
-        logger.debug("New SSH connection to %s@%s is now open" % (self._username, self.address))
+        try:
+            connection.connect(self.address, timeout=30, **kwargs)
+        except socket.timeout as exc:
+            raise ConnectionError(f"Failed top open SSH connection to "
+                                  f"{self._username}@{self.address}:{self.port}: {exc}")
+        logger.debug("New SSH connection to %s@%:%d is now open", self._username, self.address, self.port)
         return connection
 
     @property
@@ -185,10 +189,16 @@ class SSHConnection(Connection):
         self.connection.close()
 
     def reopen(self, timeout=900):
+        time_start = time.time()
         if wait_connection(self.address, self.port, timeout=timeout):
-            self._connection = self._connect()
-            return self
-        raise ConnectionError("Failed to reopen connection")
+            logger.info("Reconnecting to %s:%d" % (self.address, self.port))
+            while time.time() - timeout < time_start:
+                try:
+                    self._connection = self._connect()
+                    return self
+                except ConnectionError as exc:
+                    logger.debug("Creating new connection failed: %s" % exc)
+        raise ConnectionError("Failed to reopen connection: timeout")
 
     def expect_disconnect(self, timeout=900):
         self.close_channel()

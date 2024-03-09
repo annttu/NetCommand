@@ -179,6 +179,10 @@ def main():
             inventory_data["opts"] = {}
         if args.prompt_key_password:
             inventory_data["opts"]["ssh_key_password"] = getpass.getpass("sshkey password: ")
+        else:
+            ssh_key_password = os.environ.get("SSH_KEY_PASSWORD", None)
+            if ssh_key_password:
+                inventory_data["opts"]["ssh_key_password"] = ssh_key_password
         if args.prompt_password:
             inventory_data["opts"]["password"] = getpass.getpass("password: ")
         inventory = Inventory.load_from_dict(inventory_data)
