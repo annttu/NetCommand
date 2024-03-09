@@ -45,6 +45,7 @@ class OS10(Model):
         return
 
     def execute(self, command):
+        logger.info("Executing command: %s", command)
         return self.connection.run_interactive(command)
 
     def upgrade(self, image: GenericImage, extra_images: List[GenericImage]):

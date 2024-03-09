@@ -97,6 +97,7 @@ class RouterOS(Model):
         return self.command(command)
 
     def command(self, command, ignore_errors=False, ignore_warnings=False, ignore_duplicate=False):
+        logger.info("Executing command: %s", command)
         (stdout, stderr) = self.connection.run(command)
 
         if not ignore_errors:

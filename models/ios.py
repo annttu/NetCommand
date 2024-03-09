@@ -86,6 +86,7 @@ class IOS(Model):
             raise CommandError("Configuration save didn't succeed")
 
     def execute(self, command):
+        logger.info("Executing command: %s", command)
         return self.connection.run_interactive(command)
 
     def elevate(self):
