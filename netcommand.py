@@ -159,11 +159,14 @@ def main():
 
     args = parser.parse_args()
 
+    log_format = '%(asctime)s: %(levelname)-8s: %(message)s'
+    log_date_format = '%Y-%m-%d %H:%M:%S'
+
     if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format=log_format, datefmt=log_date_format)
         logging.getLogger(None).setLevel(logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO, format=log_format, datefmt=log_date_format)
 
     if args.limit:
         limits = args.limit.split(",")
