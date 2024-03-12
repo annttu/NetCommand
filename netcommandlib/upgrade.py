@@ -45,34 +45,42 @@ def generic_upgrade(hostname, model: Model, image: image.GenericImage, extra_ima
                 f"Skipping upgrade, current version '{current_version}' is same as update version '{extra_image.version}'")
             return True
 
-    logger.info(f"Upgrading {hostname} from '{current_version}' to '{image.version}'")
+    logger.info(f"{hostname}: Upgrading from '{current_version}' to '{image.version}'")
 
     if dry_run:
-        logger.info("Dry run, not executing upgrade commands")
-        return True
+        logger.info(f"{hostname}: Dry run, not executing upgrade commands")
 
-    result = model.upgrade(image, extra_images)
+    model.save_config(dry_run=dry_run)
+
+    result = model.upgrade(image, extra_images, dry_run=dry_run)
 
     if not result:
-        logger.error(f"Upgrade command failed for host '{hostname}'")
+        logger.error(f"{hostname}: Upgrade command failed!")
         return False
 
     updated_version = model.get_software_version()
     updated_firmware = model.get_firmware_version()
 
+    if dry_run:
+        logger.info(f"{hostname}: Updated successfully from version '{current_version}' (fw: {current_firmware}) "
+                    f"to version '{image.version}' (fw: ???) DRY RUN")
+        return True
+
     if compare_version(updated_version, image.version) == 0:
-        logger.info(f"Updated successfully from version '{current_version}' (fw: {current_firmware}) "
+        logger.info(f"{hostname}: Updated successfully from version '{current_version}' (fw: {current_firmware}) "
                     f"to version '{updated_version}' (fw: {updated_firmware})")
 
         return True
     elif compare_version(current_version, updated_version) < 0:
         logger.error(
-            f"Update failed, version '{updated_version}' don't match expected version '{image.version}' after upgrade"
+            f"{hostname}: Update failed, version '{updated_version}' "
+            f"don't match expected version '{image.version}' after upgrade"
         )
     elif current_version == updated_version:
-        logger.error(f"Update failed, versio is '{updated_version}' after update (same as original)")
+        logger.error(f"{hostname}: Update failed, versio is '{updated_version}' after update (same as original)")
     else:
         logger.error(
-            f"Update failed, version '{updated_version}' don't match expected version '{image.version}' after upgrade"
+            f"{hostname}: Update failed, version '{updated_version}' "
+            f"don't match expected version '{image.version}' after upgrade"
         )
     return False

@@ -37,7 +37,7 @@ class Model(object):
         raise NotImplemented
 
     @abstractmethod
-    def save_config(self):
+    def save_config(self, dry_run=False):
         """
         Save current configuration to device
         :return:
@@ -45,7 +45,7 @@ class Model(object):
         raise NotImplemented
 
     @abstractmethod
-    def upgrade(self, image, extra_images):
+    def upgrade(self, image, extra_images, dry_run=False):
         """
         Upgrade device with image
         :param image:
@@ -54,16 +54,16 @@ class Model(object):
         raise NotImplemented
 
     @abstractmethod
-    def execute(self, command):
+    def execute(self, command, dry_run=False, **kwargs):
         """
         Execute command
         """
         raise NotImplemented
 
-    def execute_block(self, commands):
+    def execute_block(self, commands, dry_run=False, **kwargs):
         out = []
         for command in commands:
-            out.append(self.execute(command))
+            out.append(self.execute(command, dry_run=dry_run, **kwargs))
         return out
 
     @abstractmethod

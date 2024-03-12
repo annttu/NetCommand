@@ -6,7 +6,7 @@ import time
 from typing import List
 
 from models.model import Model
-from netcommandlib import parsers
+from netcommandlib import parsers, commands
 from netcommandlib.connection import Connection, CommandError
 from netcommandlib.parsers import get_vertical_data_row
 from netcommandlib.image import GenericImage, LocalImage
@@ -57,23 +57,24 @@ class RouterOS(Model):
         "wifi-qcom-ac",
     ]
 
-    def __init__(self, connection: Connection):
+    def __init__(self, connection: Connection, hostname: str):
         self.connection = connection
+        self.hostname = hostname
 
     def get_username(self, username):
         return f"{username}+ct511w4098h"
 
     def get_platform(self):
-        stdout = self.command("/system resource print")
+        stdout = self.execute("/system resource print")
         return get_vertical_data_row(stdout, 'architecture-name')
 
     def get_software_version(self):
-        stdout = self.command("/system resource print")
+        stdout = self.execute("/system resource print")
         return get_vertical_data_row(stdout, 'version').split(None, 1)[0].strip()
 
     def get_firmware_version(self):
         try:
-            stdout = self.command("/system routerboard print")
+            stdout = self.execute("/system routerboard print")
             return get_vertical_data_row(stdout, 'current-firmware')
         except CommandError:
             # Non routerboard device
@@ -81,7 +82,7 @@ class RouterOS(Model):
 
     def get_firmware_type(self):
         try:
-            stdout = self.command("/system routerboard print")
+            stdout = self.execute("/system routerboard print")
             return get_vertical_data_row(stdout, 'firmware-type')
         except CommandError:
             return None
@@ -89,15 +90,17 @@ class RouterOS(Model):
     def get_supported_image_provider_types(self):
         return ["local"]
 
-    def save_config(self):
+    def save_config(self, dry_run=False):
         """NOP configuration save"""
         return
 
-    def execute(self, command):
-        return self.command(command)
+    def execute(self, command, dry_run=False, **kwargs):
+        commands.log_command(self.hostname, command, dry_run=dry_run)
+        return self.command(command, dry_run=dry_run, **kwargs)
 
-    def command(self, command, ignore_errors=False, ignore_warnings=False, ignore_duplicate=False):
-        logger.info("Executing command: %s", command)
+    def command(self, command, ignore_errors=False, ignore_warnings=False, ignore_duplicate=False, dry_run=False):
+        if dry_run:
+            return "DRY RUN"
         (stdout, stderr) = self.connection.run(command)
 
         if not ignore_errors:
@@ -116,10 +119,10 @@ class RouterOS(Model):
                         raise CommandError("SSH returned duplication warning: %s" % (stdout,))
         if 'input does not match ' in stdout:
             raise CommandError("SSH returned error %s" % (stdout,))
-        logger.debug("SSH:\n%s", stdout)
+        logger.debug("%s: SSH:\n%s", self.hostname, stdout)
         return stdout
 
-    def execute_block(self, commands):
+    def execute_block(self, commands, dry_run=False, **kwargs):
         out = ""
         buffer = ""
         for command in commands:
@@ -128,11 +131,11 @@ class RouterOS(Model):
                 continue
             if command.startswith("/") and buffer:
                 # execute buffer
-                out += (self.execute("{ " + buffer + ' }'))
+                out += (self.execute("{ " + buffer + ' }', dry_run=dry_run))
                 buffer = ""
             buffer += command + "; "
         if buffer:
-            out += (self.execute("{ " + buffer + ' }'))
+            out += (self.execute("{ " + buffer + ' }', dry_run=dry_run))
         return out
 
     def get_extra_packages(self, version):
@@ -176,7 +179,9 @@ class RouterOS(Model):
                         elif firmware_type.startswith("ipq60"):
                             extra_packages.append({"NAME": "wifi-qcom", "VERSION": current_version})
                         else:
-                            logger.warning(f"Don't know replacement for wifiwave2 package for {firmware_type}")
+                            logger.warning(
+                                f"{self.hostname}: Don't know replacement for wifiwave2 package for {firmware_type}"
+                            )
                             raise NotImplemented(f"Don't know replacement for wifiwave2 package for {firmware_type}")
                         break
                     idx += 1
@@ -187,7 +192,7 @@ class RouterOS(Model):
                         extra_packages.append({"NAME": "wireless", "VERSION": current_version})
         return extra_packages
 
-    def upgrade(self, image: GenericImage, extra_images: List[GenericImage]):
+    def upgrade(self, image: GenericImage, extra_images: List[GenericImage], dry_run=False):
         # TODO: Check for extra packages!
         # Upload image
         if not isinstance(image, LocalImage):
@@ -196,8 +201,12 @@ class RouterOS(Model):
         for extra_image in extra_images:
             if not isinstance(extra_image, LocalImage):
                 raise NotImplemented(f"Image type {type(extra_image)} not implemented")
-            with open(extra_image.path, 'rb') as f:
-                self.connection.upload_file(f, extra_image.filename)
+            logger.info(
+                f"{self.hostname}: Uploading new image file '{extra_image.filename}' to {self.connection.get_address()}"
+            )
+            if not dry_run:
+                with open(extra_image.path, 'rb') as f:
+                    self.connection.upload_file(f, extra_image.filename)
 
         current_version = self.get_software_version()
 
@@ -205,50 +214,58 @@ class RouterOS(Model):
             # We need to update first to version 7.12.1 or 7.12.0 and continue then to >= 7.13.
             raise RuntimeError("Please update first to version 12.1 and after that to later versions")
 
-        logger.info(f"Uploading new image file '{image.filename}' to {self.connection.get_address()}")
-        with open(image.path, 'rb') as f:
-            self.connection.upload_file(f, image.filename)
+        logger.info(f"{self.hostname}: Uploading new image file '{image.filename}' to {self.connection.get_address()}")
+        if not dry_run:
+            with open(image.path, 'rb') as f:
+                self.connection.upload_file(f, image.filename)
 
         # Restart device
-        logger.info(f"Rebooting {self.connection.get_address()}")
+        logger.info(f"{self.hostname}: Rebooting {self.connection.get_address()}")
         try:
-            self.connection.run("/system reboot")
+            self.execute("/system reboot", dry_run=dry_run)
         except TimeoutError:
             pass
         except Exception:
             # TODO Handle only pipe timeouts
             pass
-        # Close connection, wait 5 seconds (for device to reboot) and reconnect.
-        self.connection.expect_disconnect()
-        # Upgrade firmware
-        return self.upgrade_firmware()
 
-    def upgrade_firmware(self):
+        if not dry_run:
+            # Close connection, wait 5 seconds (for device to reboot) and reconnect.
+            self.connection.expect_disconnect()
+        # Upgrade firmware
+        return self.upgrade_firmware(dry_run=dry_run)
+
+    def upgrade_firmware(self, dry_run=False):
         try:
-            stdout = self.command("/system routerboard print")
+            stdout = self.execute("/system routerboard print")
             current_firmware = get_vertical_data_row(stdout, 'current-firmware')
             upgrade_firmware = get_vertical_data_row(stdout, 'upgrade-firmware')
         except CommandError:
-            logger.exception("Failed to check firmware version")
+            logger.exception(f"{self.hostname}: Failed to check firmware version")
             return True
 
         if current_firmware != upgrade_firmware:
-            logger.info(f"Upgrading routerboard firmware on {self.connection.get_address()}")
-            self.connection.run("/system routerboard upgrade")
+            logger.info(f"{self.hostname}: Upgrading routerboard firmware on {self.connection.get_address()}")
+            self.execute("/system routerboard upgrade", dry_run=dry_run)
             # Wait for "Firmware upgraded successfully, please reboot for changes to take effect!" text
-            for i in range(5):
-                time.sleep(5)
-                stdout = self.command("/system routerboard print")
-                if 'please reboot' in stdout:
-                    break
-            else:
-                raise RuntimeError("Timeout while waiting firmware upgrade")
+            if not dry_run:
+                for i in range(5):
+                    time.sleep(5)
+                    stdout = self.command("/system routerboard print")
+                    if 'please reboot' in stdout:
+                        break
+                else:
+                    raise RuntimeError("Timeout while waiting firmware upgrade")
 
-            logger.info(f"Rebooting {self.connection.get_address()}")
+            logger.info(f"{self.hostname}: Rebooting {self.connection.get_address()}")
             try:
-                self.connection.run("/system reboot")
+                self.execute("/system reboot", dry_run=dry_run)
             except TimeoutError:
                 pass
+
+            if dry_run:
+                return True
+
             self.connection.expect_disconnect()
 
             # Check current-firmware is same as upgrade-firmware after upgrade
@@ -256,7 +273,10 @@ class RouterOS(Model):
             current_firmware = get_vertical_data_row(stdout, 'current-firmware')
             upgrade_firmware = get_vertical_data_row(stdout, 'upgrade-firmware')
 
-            return current_firmware == upgrade_firmware
+        if dry_run:
+            return True
+
+        return current_firmware == upgrade_firmware
 
     def get_upgrade_package_name(self, version):
         if version.startswith("6"):

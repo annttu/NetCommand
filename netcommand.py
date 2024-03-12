@@ -15,7 +15,8 @@ import argparse
 
 import models
 from models.model import Model
-from netcommandlib.connection import connection_from_opts
+from netcommandlib import commands
+from netcommandlib.connection import SSHConnection, connection_from_opts
 from netcommandlib.image_provider import IMAGE_PROVIDERS
 from netcommandlib.inventory import Inventory
 from netcommandlib.upgrade import generic_upgrade
@@ -34,7 +35,7 @@ def get_model(hostname: str, opts: Dict) -> Union[Model, None]:
 
     connection = connection_from_opts(opts, login_dialog=models.MODELS[model_name].login_dialog)
 
-    model = models.MODELS[model_name](connection=connection)
+    model = models.MODELS[model_name](connection=connection, hostname=hostname)
 
     # connection.connect()
     return model
@@ -74,7 +75,7 @@ def update(args, hostname, opts, image_providers, dry_run=False):
 
     if not image:
         logger.error(
-            f"Failed to find upgrade image '{filename}' for {hostname} {args.version} {model.get_platform()}")
+            f"{hostname}: Failed to find upgrade image '{filename}' for {args.version} {model.get_platform()}")
         return result
 
     extra_images = []
@@ -89,7 +90,7 @@ def update(args, hostname, opts, image_providers, dry_run=False):
 
         if not extra_image:
             logger.error(
-                f"Failed to find extra image '{extra_image_filename}' for {hostname} {args.version} {model.get_platform()}")
+                f"{hostname}: Failed to find extra image '{extra_image_filename}' for {args.version} {model.get_platform()}")
             return result
         extra_images.append(extra_image)
 
@@ -104,7 +105,7 @@ def update(args, hostname, opts, image_providers, dry_run=False):
         else:
             result["current_software_version"] = image.version
     except Exception as exc:
-        logger.exception(f"Upgrade failed: {exc}")
+        logger.exception(f"{hostname}: Upgrade failed: {exc}")
     return result
 
 
@@ -146,6 +147,7 @@ def main():
     parser.add_argument("-S", "--stop-on-error", help="stop on first error", default=False, action="store_true")
     parser.add_argument("-l", "--limit", help="Limit to hosts/groups", default="")
     parser.add_argument("-C", "--check", help="Check mode, don't make changes", default=False, action="store_true")
+    parser.add_argument("--debug-commands", help="Debug commands", default=False, action="store_true")
     parser.add_argument("inventory", help="Inventory file")
 
     subparsers = parser.add_subparsers(help='actions', required=True)
@@ -159,7 +161,6 @@ def main():
     command_parser.set_defaults(func=command)
     version_parser.set_defaults(func=version)
 
-
     args = parser.parse_args()
 
     log_format = '%(asctime)s: %(levelname)-8s: %(message)s'
@@ -170,6 +171,9 @@ def main():
         logging.getLogger(None).setLevel(logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO, format=log_format, datefmt=log_date_format)
+
+    if args.debug_commands:
+        commands.logger.setLevel(logging.DEBUG)
 
     if args.limit:
         limits = args.limit.split(",")

@@ -27,10 +27,10 @@ class LocalImageProvider(object):
         files = glob.glob(os.path.join(self.directory, filename))
 
         if len(files) == 0:
-            logger.error(f"Failed to find upgrade image {filename}")
+            logger.error(f"LocalImageProvider: Failed to find upgrade image {filename}")
             return None
         elif len(files) > 1:
-            logger.error(f"Multiple files found matching {filename} in path {self.directory}")
+            logger.error(f"LocalImageProvider: Multiple files found matching {filename} in path {self.directory}")
             return None
 
         return image.LocalImage(path=files[0], **kwargs)

@@ -7,7 +7,7 @@ from typing import List, Union
 
 from models.model import Model
 from netcommandlib.connection import CommandError, SSHConnection, TelnetConnection, Actions
-from netcommandlib import parsers
+from netcommandlib import parsers, commands
 from netcommandlib.image import NetworkImage, GenericImage
 from netcommandlib import expect
 
@@ -37,14 +37,15 @@ class IOS(Model):
     VERSION_HEADER = ["Switch", "Ports", "Model", "SW Version", "SW Image", "Mode"]
     VERSION_HEADER_XE = ["Switch", "Ports", "Model", "SW Version", "SW Image"]
 
-    def __init__(self, connection: Union[SSHConnection, TelnetConnection], enable_password=None):
+    def __init__(self, connection: Union[SSHConnection, TelnetConnection], hostname: str, enable_password=None):
         self.connection = connection
+        self.hostname = hostname
         self.enable_password = enable_password
         self.connection.connect()
         self.connection.run_interactive("terminal length 0")
 
     def get_platform(self):
-        stdout = self.connection.run_interactive("show version", timeout=30)
+        stdout = self.execute("show version", timeout=30)
         model_id = parsers.get_regex_data_row(stdout, r"^Model Number\.+: (.+)$")
         if model_id.startswith("N"):
             # for example N1548P -> N1500
@@ -52,7 +53,7 @@ class IOS(Model):
         return model_id
 
     def _get_software_versions(self):
-        stdout = self.connection.run_interactive("show version", timeout=30)
+        stdout = self.execute("show version", timeout=30)
         versions = parsers.get_tabular_data_fixed_header_width(stdout, header=self.VERSION_HEADER)
         logger.debug("Versions: %s", (versions,))
         return versions
@@ -80,15 +81,17 @@ class IOS(Model):
     def get_supported_image_provider_types(self):
         return ["tftp", "scp", "http", "https"]
 
-    def save_config(self):
+    def save_config(self, dry_run=False):
         self.elevate()
-        stdout = self.connection.run_interactive("write memory", timeout=30)
+        stdout = self.execute("write memory", timeout=30, dry_run=dry_run)
+        if dry_run:
+            return
         if "[OK]" not in stdout:
             raise CommandError("Configuration save didn't succeed")
 
-    def execute(self, command):
-        logger.info("Executing command: %s", command)
-        return self.connection.run_interactive(command)
+    def execute(self, command, dry_run=False, **kwargs):
+        commands.log_command(self.hostname, command, dry_run=dry_run)
+        return self.connection.run_interactive(command, dry_run=dry_run, **kwargs)
 
     def elevate(self):
         if self.enable_password:
@@ -102,7 +105,7 @@ class IOS(Model):
         self.connection.set_prompt("#")
         raise_on_errors(self.connection.run_interactive(f"enable", row_callback=expect.expect_strings(answers)))
 
-    def upgrade(self, image: GenericImage, extra_images: List[GenericImage]):
+    def upgrade(self, image: GenericImage, extra_images: List[GenericImage], dry_run=False):
         raise NotImplemented("This function is not implemented properly")
 
     def upgrade_firmware(self):

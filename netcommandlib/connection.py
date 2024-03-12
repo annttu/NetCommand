@@ -439,11 +439,13 @@ class SSHConnection(Connection):
     def reset_prompt(self):
         self.prompt = self._initial_prompt
 
-    def run_interactive(self, command, timeout=5, row_callback=None, end_of_line=None):
+    def run_interactive(self, command, timeout=5, row_callback=None, end_of_line=None, dry_run=False):
         if not end_of_line:
             end_of_line = "\r\n"
         end_of_line = end_of_line.encode("utf-8")
         logger.debug("SSH Interactive Command: %s", command)
+        if dry_run:
+            return None
         self._wait_prompt(timeout=timeout)
         self.set_timeout(timeout)
         binary_command = command.encode("utf-8")
