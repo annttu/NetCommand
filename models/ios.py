@@ -40,6 +40,7 @@ class IOS(Model):
     def __init__(self, connection: Union[SSHConnection, TelnetConnection], enable_password=None):
         self.connection = connection
         self.enable_password = enable_password
+        self.connection.connect()
         self.connection.run_interactive("terminal length 0")
 
     def get_platform(self):

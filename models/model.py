@@ -61,8 +61,10 @@ class Model(object):
         raise NotImplemented
 
     def execute_block(self, commands):
+        out = []
         for command in commands:
-            self.execute(command)
+            out.append(self.execute(command))
+        return out
 
     @abstractmethod
     def get_upgrade_package_name(self, version):

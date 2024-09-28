@@ -15,7 +15,7 @@ import argparse
 
 import models
 from models.model import Model
-from netcommandlib.connection import SSHConnection, connection_from_opts
+from netcommandlib.connection import connection_from_opts
 from netcommandlib.image_provider import IMAGE_PROVIDERS
 from netcommandlib.inventory import Inventory
 from netcommandlib.upgrade import generic_upgrade
@@ -130,7 +130,7 @@ def command(args, hostname, opts, image_providers, dry_run=False):
     logger.info(f"Executing commands: {commands}")
 
     if not dry_run:
-        logger.info(model.execute_block(commands))
+        logger.info('\n'.join(model.execute_block(commands)))
     else:
         logger.info("DRY RUN")
 

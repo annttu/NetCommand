@@ -118,6 +118,7 @@ def wait_prompt_with_callback(
     if at_prompt:
         data = data[min_input_length:data.rfind("\n")]
     logger.debug(f"Input data:\n{data}")
+    logger.debug(f"At prompt {at_prompt}")
     return data, at_prompt
 
 
@@ -238,6 +239,7 @@ class TelnetConnection(Connection):
         return data
 
     def _wait_prompt(self, timeout=5, prompt=None):
+        logger.debug(f"wait_prompt: at_prompt: {self._at_prompt}")
         if self._at_prompt:
             return
         data = ""
