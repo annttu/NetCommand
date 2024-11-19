@@ -64,7 +64,7 @@ class HTTPImageProvider(object):
         if not self.check_exists(url):
             return None
 
-        return image.NetworkImage(protocol=self.type, server=self.server, path=f"{self.path}/{filename}",
+        return image.HTTPImage(protocol=self.type, server=self.server, path=f"{self.path}/{filename}",
                                   port=self.port, username=self.username, password=self.password, **kwargs)
 
 

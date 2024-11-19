@@ -9,7 +9,7 @@ from models.model import Model
 from netcommandlib import parsers, commands
 from netcommandlib.connection import Connection, CommandError
 from netcommandlib.parsers import get_vertical_data_row
-from netcommandlib.image import GenericImage, LocalImage
+from netcommandlib.image import GenericImage, LocalImage, HTTPImage
 from netcommandlib.version import compare_version
 
 logger = logging.getLogger("RouterOS")
@@ -138,6 +138,9 @@ class RouterOS(Model):
             out += (self.execute("{ " + buffer + ' }', dry_run=dry_run))
         return out
 
+    def download_image(self, image: HTTPImage, dry_run):
+        return self.execute(f"/tool fetch url=\"{image.get_url()}\" output=file", dry_run=dry_run)
+
     def get_extra_packages(self, version):
         """
         TODO: Wifiwave2 package has been replaced in 7.13 with wifi-qcom and wifi-qcom-ac packages.
@@ -195,18 +198,21 @@ class RouterOS(Model):
     def upgrade(self, image: GenericImage, extra_images: List[GenericImage], dry_run=False):
         # TODO: Check for extra packages!
         # Upload image
-        if not isinstance(image, LocalImage):
+        if not isinstance(image, LocalImage) and not isinstance(image, HTTPImage):
             raise NotImplemented(f"Image type {type(image)} not implemented")
 
         for extra_image in extra_images:
-            if not isinstance(extra_image, LocalImage):
+            if isinstance(extra_image, LocalImage):
+                logger.info(
+                    f"{self.hostname}: Uploading new image file '{extra_image.filename}' to {self.connection.get_address()}"
+                )
+                if not dry_run:
+                    with open(extra_image.path, 'rb') as f:
+                        self.connection.upload_file(f, extra_image.filename)
+            elif isinstance(extra_image, HTTPImage):
+                self.download_image(image=extra_image, dry_run=dry_run)
+            else:
                 raise NotImplemented(f"Image type {type(extra_image)} not implemented")
-            logger.info(
-                f"{self.hostname}: Uploading new image file '{extra_image.filename}' to {self.connection.get_address()}"
-            )
-            if not dry_run:
-                with open(extra_image.path, 'rb') as f:
-                    self.connection.upload_file(f, extra_image.filename)
 
         current_version = self.get_software_version()
 
@@ -214,10 +220,16 @@ class RouterOS(Model):
             # We need to update first to version 7.12.1 or 7.12.0 and continue then to >= 7.13.
             raise RuntimeError("Please update first to version 12.1 and after that to later versions")
 
-        logger.info(f"{self.hostname}: Uploading new image file '{image.filename}' to {self.connection.get_address()}")
-        if not dry_run:
-            with open(image.path, 'rb') as f:
-                self.connection.upload_file(f, image.filename)
+        if isinstance(image, LocalImage):
+            logger.info(f"{self.hostname}: Uploading new image file '{image.filename}' to {self.connection.get_address()}")
+            if not dry_run:
+                with open(image.path, 'rb') as f:
+                    self.connection.upload_file(f, image.filename)
+        elif isinstance(image, HTTPImage):
+            logger.info(
+                f"{self.hostname}: Downloading new image file '{image.get_url()}' to {self.connection.get_address()}"
+            )
+            self.download_image(image=image, dry_run=dry_run)
 
         # Restart device
         logger.info(f"{self.hostname}: Rebooting {self.connection.get_address()}")

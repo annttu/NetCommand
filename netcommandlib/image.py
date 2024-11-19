@@ -32,6 +32,9 @@ class NetworkImage(GenericImage):
         self.port = port
         self.filename = os.path.basename(self.path)
 
+    def validate_protocol(self):
+        return True
+
     def get_url(self, credentials=True, skip_port=False):
         auth = ""
         if self.username and self.password and credentials is True:
@@ -42,3 +45,8 @@ class NetworkImage(GenericImage):
         if self.port and not skip_port:
             port = f":{self.port}"
         return f"{self.protocol}://{auth}{self.server}{port}/{self.path.lstrip('/')}"
+
+
+class HTTPImage(NetworkImage):
+    def validate_protocol(self):
+        return self.protocol in ["http", "https"]
