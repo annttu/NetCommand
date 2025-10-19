@@ -16,7 +16,7 @@ import argparse
 import models
 from models.model import Model
 from netcommandlib import commands
-from netcommandlib.connection import SSHConnection, connection_from_opts
+from netcommandlib.connection import connection_from_opts
 from netcommandlib.image_provider import IMAGE_PROVIDERS
 from netcommandlib.inventory import Inventory
 from netcommandlib.upgrade import generic_upgrade
@@ -90,7 +90,9 @@ def update(args, hostname, opts, image_providers, dry_run=False):
 
         if not extra_image:
             logger.error(
-                f"{hostname}: Failed to find extra image '{extra_image_filename}' for {args.version} {model.get_platform()}")
+                f"{hostname}: Failed to find extra image '{extra_image_filename}' "
+                f"for {args.version} {model.get_platform()}"
+            )
             return result
         extra_images.append(extra_image)
 
@@ -142,11 +144,19 @@ def command(args, hostname, opts, image_providers, dry_run=False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--debug", action="store_true", default=False)
-    parser.add_argument("-K", "--prompt-key-password", help="Prompt ssh key password", default=False, action="store_true")
-    parser.add_argument("-P", "--prompt-password", help="Prompt password", default=False, action="store_true")
-    parser.add_argument("-S", "--stop-on-error", help="stop on first error", default=False, action="store_true")
+    parser.add_argument(
+        "-K", "--prompt-key-password", help="Prompt ssh key password", default=False, action="store_true"
+    )
+    parser.add_argument(
+        "-P", "--prompt-password", help="Prompt password", default=False, action="store_true"
+    )
+    parser.add_argument(
+        "-S", "--stop-on-error", help="stop on first error", default=False, action="store_true"
+    )
     parser.add_argument("-l", "--limit", help="Limit to hosts/groups", default="")
-    parser.add_argument("-C", "--check", help="Check mode, don't make changes", default=False, action="store_true")
+    parser.add_argument(
+        "-C", "--check", help="Check mode, don't make changes", default=False, action="store_true"
+    )
     parser.add_argument("--debug-commands", help="Debug commands", default=False, action="store_true")
     parser.add_argument("inventory", help="Inventory file")
 
@@ -213,10 +223,12 @@ def main():
     failed = 0
 
     results = {}
-    for hostname, opts in hosts.items():
+
+    for hostname in hosts.keys():
         results[hostname] = {
             "status": "SKIPPED",
         }
+
     for hostname, opts in hosts.items():
         try:
             results[hostname] = args.func(args, hostname, opts, image_providers=image_providers,
@@ -239,11 +251,15 @@ def main():
         details = " DRY RUN"
     print(f"\n\nSummary{details}:")
     if args.func == update:
-        print(f"{'status':10s} {'hostname':30s} {'initial_version':20s} -> {'new_version':20s} {'initial_firmware':20s} -> {'new_firmware':20s}")
+        print(f"{'status':10s} {'hostname':30s} {'initial_version':20s} -> {'new_version':20s} "
+              f"{'initial_firmware':20s} -> {'new_firmware':20s}")
         for hostname, result in results.items():
             print(
-                f"{result['status']:10s} {hostname:30s} {result.get('initial_software_version', 'None'):20s} -> {result.get('current_software_version', 'None'):20s} "
-                f"{result.get('initial_firmware_version', 'None'):20s} -> {result.get('current_firmware_version', 'None'):20s}"
+                f"{result['status']:10s} {hostname:30s} "
+                f"{result.get('initial_software_version', 'None'):20s} -> "
+                f"{result.get('current_software_version', 'None'):20s} "
+                f"{result.get('initial_firmware_version', 'None'):20s} -> "
+                f"{result.get('current_firmware_version', 'None'):20s}"
             )
     elif args.func == command:
         print(

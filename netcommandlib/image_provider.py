@@ -14,7 +14,7 @@ class ImageProvider(object):
     type = "generic"
 
     def find_image(self, filename):
-        raise NotImplemented()
+        raise NotImplementedError()
 
 
 class LocalImageProvider(object):
@@ -64,8 +64,15 @@ class HTTPImageProvider(object):
         if not self.check_exists(url):
             return None
 
-        return image.HTTPImage(protocol=self.type, server=self.server, path=f"{self.path}/{filename}",
-                                  port=self.port, username=self.username, password=self.password, **kwargs)
+        return image.HTTPImage(
+            protocol=self.type,
+            server=self.server,
+            path=f"{self.path}/{filename}",
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            **kwargs
+        )
 
 
 class HTTPSImageProvider(HTTPImageProvider):

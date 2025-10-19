@@ -102,13 +102,13 @@ class DellN(Model):
         }
         self.connection._wait_prompt()
         self.connection.set_prompt("#")
-        raise_on_errors(self.execute(f"enable", row_callback=expect.expect_strings(answers)))
+        raise_on_errors(self.execute("enable", row_callback=expect.expect_strings(answers)))
 
     def upgrade(self, image: GenericImage, extra_images: List[GenericImage], dry_run: bool = False):
         if extra_images:
             raise CommandError("Don't know how to handle extra images")
         if not isinstance(image, NetworkImage):
-            raise NotImplemented(f"Image type {type(image)} not implemented")
+            raise NotImplementedError(f"Image type {type(image)} not implemented")
         answers = {
             "Are you sure you want to start?": "y",  # copy
             "Are you sure you want to continue?": "y",  # reload
@@ -176,8 +176,8 @@ class DellN(Model):
             "Are you sure you want to reload the stack?": "y",  # reload
         }
         # Update bootcode
-        self.execute(f"update bootcode", dry_run=dry_run)
-        self.execute(f"reload", row_callback=expect.expect_strings(answers), dry_run=dry_run)
+        self.execute("update bootcode", dry_run=dry_run)
+        self.execute("reload", row_callback=expect.expect_strings(answers), dry_run=dry_run)
         if not dry_run:
             self.connection.expect_disconnect()
 

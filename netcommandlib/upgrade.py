@@ -8,41 +8,57 @@ from netcommandlib import image
 logger = logging.getLogger("generic_updater")
 
 
-def generic_upgrade(hostname, model: Model, image: image.GenericImage, extra_images: List[image.GenericImage], dry_run=False):
+def generic_upgrade(
+        hostname: str,
+        model: Model,
+        image: image.GenericImage,
+        extra_images: List[image.GenericImage],
+        dry_run=False
+):
+
     current_version = model.get_software_version()
     current_firmware = model.get_firmware_version()
 
     if image.platform != model.get_platform():
         logger.error(
-            f"Skipping upgrade, device platform '{model.get_platform()}' don't match image platform '{image.platform}'")
+            f"Skipping upgrade, device platform '{model.get_platform()}' don't match image platform '{image.platform}'"
+        )
         return False
 
     if compare_version(image.version, current_version) < 0:
         # Current version is bigger than given version
         logger.warning(
-            f"Skipping upgrade, current version '{current_version}' is bigger than update version '{image.version}'")
+            f"Skipping upgrade, current version '{current_version}' is bigger than update version '{image.version}'"
+        )
         return False
     if compare_version(image.version, current_version) < 1:
         # Current version is same as given version
         logger.warning(
-            f"Skipping upgrade, current version '{current_version}' is same as update version '{image.version}'")
+            f"Skipping upgrade, current version '{current_version}' is same as update version '{image.version}'"
+        )
         return True
 
     for extra_image in extra_images:
         if extra_image.platform != model.get_platform():
             logger.error(
-                f"Skipping upgrade, device platform '{model.get_platform()}' don't match image platform '{extra_image.platform}'")
+                f"Skipping upgrade, device platform '{model.get_platform()}' "
+                f"don't match image platform '{extra_image.platform}'"
+            )
             return False
 
         if compare_version(extra_image.version, current_version) < 0:
             # Current version is bigger than given version
             logger.warning(
-                f"Skipping upgrade, current version '{current_version}' is bigger than update version '{extra_image.version}'")
+                f"Skipping upgrade, current version '{current_version}' "
+                f"is bigger than update version '{extra_image.version}'"
+            )
             return False
         if compare_version(extra_image.version, current_version) < 1:
             # Current version is same as given version
             logger.warning(
-                f"Skipping upgrade, current version '{current_version}' is same as update version '{extra_image.version}'")
+                f"Skipping upgrade, current version '{current_version}' "
+                f"is same as update version '{extra_image.version}'"
+            )
             return True
 
     logger.info(f"{hostname}: Upgrading from '{current_version}' to '{image.version}'")

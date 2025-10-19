@@ -15,7 +15,6 @@ from netcommandlib.version import compare_version
 logger = logging.getLogger("RouterOS")
 
 
-
 cli_errors = [
     'expected end of command (',
     'bad command name',
@@ -185,7 +184,9 @@ class RouterOS(Model):
                             logger.warning(
                                 f"{self.hostname}: Don't know replacement for wifiwave2 package for {firmware_type}"
                             )
-                            raise NotImplemented(f"Don't know replacement for wifiwave2 package for {firmware_type}")
+                            raise NotImplementedError(
+                                f"Don't know replacement for wifiwave2 package for {firmware_type}"
+                            )
                         break
                     idx += 1
                 else:
@@ -199,12 +200,13 @@ class RouterOS(Model):
         # TODO: Check for extra packages!
         # Upload image
         if not isinstance(image, LocalImage) and not isinstance(image, HTTPImage):
-            raise NotImplemented(f"Image type {type(image)} not implemented")
+            raise NotImplementedError(f"Image type {type(image)} not implemented")
 
         for extra_image in extra_images:
             if isinstance(extra_image, LocalImage):
                 logger.info(
-                    f"{self.hostname}: Uploading new image file '{extra_image.filename}' to {self.connection.get_address()}"
+                    f"{self.hostname}: Uploading new image file '{extra_image.filename}' "
+                    f"to {self.connection.get_address()}"
                 )
                 if not dry_run:
                     with open(extra_image.path, 'rb') as f:
@@ -212,7 +214,7 @@ class RouterOS(Model):
             elif isinstance(extra_image, HTTPImage):
                 self.download_image(image=extra_image, dry_run=dry_run)
             else:
-                raise NotImplemented(f"Image type {type(extra_image)} not implemented")
+                raise NotImplementedError(f"Image type {type(extra_image)} not implemented")
 
         current_version = self.get_software_version()
 
@@ -221,7 +223,9 @@ class RouterOS(Model):
             raise RuntimeError("Please update first to version 12.1 and after that to later versions")
 
         if isinstance(image, LocalImage):
-            logger.info(f"{self.hostname}: Uploading new image file '{image.filename}' to {self.connection.get_address()}")
+            logger.info(
+                f"{self.hostname}: Uploading new image file '{image.filename}' to {self.connection.get_address()}"
+            )
             if not dry_run:
                 with open(image.path, 'rb') as f:
                     self.connection.upload_file(f, image.filename)

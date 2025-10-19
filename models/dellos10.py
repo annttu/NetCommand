@@ -7,7 +7,7 @@ from typing import List
 
 from models.model import Model
 from netcommandlib import parsers, expect, commands
-from netcommandlib.connection import Connection, SSHConnection, CommandError
+from netcommandlib.connection import SSHConnection, CommandError
 from netcommandlib.parsers import get_vertical_data_row
 from netcommandlib.image import NetworkImage, GenericImage
 
@@ -63,7 +63,7 @@ class OS10(Model):
         if extra_images:
             raise CommandError("Don't know how to handle extra images")
         if not isinstance(image, NetworkImage):
-            raise NotImplemented(f"Image type {type(image)} not implemented")
+            raise NotImplementedError("Image type {type(image)} not implemented")
         # Upload image
         stdout = self.execute(f"image download {image.get_url()}", timeout=command_timeout)
         if "Download started" not in stdout:
@@ -102,11 +102,10 @@ class OS10(Model):
                 raise CommandError("image install timeout")
         # Wait for image installation
         self.execute("boot system standby")
-        raise NotImplemented("Image installation check not implemented")
+        raise NotImplementedError("Image installation check not implemented")
         # Restart device
         try:
-            self.execute("reload", row_callback=expect.expect_strings(answers),
-                                            timeout=30)
+            self.execute("reload", row_callback=expect.expect_strings(answers), timeout=30)
         except TimeoutError:
             pass
         # Close connection, wait 60 seconds (for device to reboot) and reconnect.

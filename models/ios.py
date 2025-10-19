@@ -2,13 +2,12 @@
 Cisco IOS switch model.
 """
 import logging
-import time
 from typing import List, Union
 
 from models.model import Model
 from netcommandlib.connection import CommandError, SSHConnection, TelnetConnection, Actions
 from netcommandlib import parsers, commands
-from netcommandlib.image import NetworkImage, GenericImage
+from netcommandlib.image import GenericImage
 from netcommandlib import expect
 
 
@@ -103,13 +102,13 @@ class IOS(Model):
         }
         self.connection._wait_prompt()
         self.connection.set_prompt("#")
-        raise_on_errors(self.connection.run_interactive(f"enable", row_callback=expect.expect_strings(answers)))
+        raise_on_errors(self.connection.run_interactive("enable", row_callback=expect.expect_strings(answers)))
 
     def upgrade(self, image: GenericImage, extra_images: List[GenericImage], dry_run=False):
-        raise NotImplemented("This function is not implemented properly")
+        raise NotImplementedError("This function is not implemented properly")
 
     def upgrade_firmware(self):
-        raise NotImplemented("Not implemented")
+        raise NotImplementedError("Not implemented")
 
     def get_upgrade_package_name(self, version):
-        raise NotImplemented("Not implemented")
+        raise NotImplementedError("Not implemented")

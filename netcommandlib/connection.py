@@ -24,35 +24,35 @@ class Connection(object):
 
     @abstractmethod
     def run(self, command, timeout=5):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abstractmethod
     def run_interactive(self, command, timeout=5, row_callback=None, end_of_line=None):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abstractmethod
     def upload_file(self, buffer, filename):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abstractmethod
     def close(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abstractmethod
     def reopen(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abstractmethod
     def connect(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abstractmethod
     def expect_disconnect(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abstractmethod
     def get_address(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
 
 class Actions(Enum):
@@ -79,7 +79,7 @@ def wait_prompt_with_callback(
         row_callback=None,
         min_input_length=0,
         encoding="utf-8"
-    ):
+):
     at_prompt = False
     data = ""
     times_sleep = 0
@@ -94,7 +94,7 @@ def wait_prompt_with_callback(
             times_sleep += 1
             if times_sleep > timeout:
                 raise TimeoutError
-            logger.debug(f"No new data received")
+            logger.debug("No new data received")
             continue
         if len(data) > min_input_length:
             if data.endswith(prompt) or data.endswith(prompt + " "):
@@ -109,8 +109,6 @@ def wait_prompt_with_callback(
                         break_out = True
                         break
                     elif isinstance(action, str):
-                        #if not action.endswith("\n"):
-                        #    action += "\n"
                         send_function(action.encode(encoding))
                 if break_out:
                     break
@@ -213,7 +211,7 @@ class TelnetConnection(Connection):
         return data
 
     def upload_file(self, buffer, filename):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def close(self):
         if self._channel:
@@ -470,6 +468,7 @@ class SSHConnection(Connection):
 
     def get_address(self):
         return self.address
+
 
 def connection_from_opts(opts, login_dialog=None):
     method = 'ssh'
