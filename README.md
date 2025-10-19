@@ -37,6 +37,18 @@ Environment variables override values from inventory file.
 
 `SSH_PASSWORD` is used while connecting to devices. Overrides opts.password variable.
 
+Supported operating systems:
+---
+
+| Model name | OS                | Commands | Upgrade |
+|------------|-------------------| -- | -- |
+| routeros   | Mikrotik RouterOS | Yes | Yes |
+| delln      | Dell N-series     | Yes | Yes |
+| dellos10   | Dell OS10         | Yes | Partial* |
+| ios        | Cisco IOS         | Yes | No |
+
+*  Dell OS10 upgrade downloads and installs the upgrade image but needs to be reloaded manually.
+
 
 License
 =======

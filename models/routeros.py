@@ -130,11 +130,11 @@ class RouterOS(Model):
                 continue
             if command.startswith("/") and buffer:
                 # execute buffer
-                out += (self.execute("{ " + buffer + ' }', dry_run=dry_run))
+                out += self.execute("{ " + buffer + ' }', dry_run=dry_run)
                 buffer = ""
             buffer += command + "; "
         if buffer:
-            out += (self.execute("{ " + buffer + ' }', dry_run=dry_run))
+            out += self.execute("{ " + buffer + ' }', dry_run=dry_run)
         return out
 
     def download_image(self, image: HTTPImage, dry_run):

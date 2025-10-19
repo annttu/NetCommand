@@ -133,7 +133,8 @@ def command(args, hostname, opts, image_providers, dry_run=False):
     logger.info(f"Executing commands: {commands}")
 
     if not dry_run:
-        logger.info('\n'.join(model.execute_block(commands)))
+        output = model.execute_block(commands)
+        logger.info(output)
     else:
         logger.info("DRY RUN")
 
