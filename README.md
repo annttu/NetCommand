@@ -28,6 +28,15 @@ For example routeros-arm64-7.10.2.npk or os10-Enterprise-10.1.2.345.bin
 ./netcommand.py [-d] [-l|--limit hostname|group[,hostname2|group2...]] [-C|--dry-run] [-K] inventory.yaml update version
 ```
 
+Environment variables
+---
+
+Environment variables override values from inventory file.
+
+`SSH_KEY_PASSWORD` is used to open ssh key.
+
+`SSH_PASSWORD` is used while connecting to devices. Overrides opts.password variable.
+
 
 License
 =======
