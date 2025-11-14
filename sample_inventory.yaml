@@ -7,6 +7,14 @@ groups:
   downstairs:
     opts:
       model: routeros
+      ssh_jump_host:
+        hostname: 192.168.2.1
+        # Username and password default to values from parent
+        # username: user
+        # password: password
+        # or
+        # ssh_key: filename
+      username: operator
     hosts:
       switch2:
         hostname: 192.168.1.2

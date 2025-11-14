@@ -272,7 +272,8 @@ class SSHConnection(Connection):
             key_password=None,
             port=22,
             prompt=">",
-            login_dialog=None
+            login_dialog=None,
+            jump_host=None,
     ):
         self.address = address
         self.port = port
@@ -286,6 +287,9 @@ class SSHConnection(Connection):
         self._initial_prompt = prompt
         self._channel = None
         self._at_prompt = False
+        self.jump_host = jump_host
+        self._jump_host_connection = None
+
 
         if 'SSH_AUTH_SOCK' in os.environ:
             del os.environ['SSH_AUTH_SOCK']
@@ -334,6 +338,26 @@ class SSHConnection(Connection):
             kwargs['pkey'] = rsa_key
         else:
             kwargs['password'] = self._password
+        if self.jump_host:
+            logger.debug(f"Connecting to SSH jumping host '{self.jump_host}'")
+            if not self._jump_host_connection:
+                self._jump_host_connection = SSHConnection(
+                    address=self.jump_host["hostname"],
+                    username=self.jump_host.get("username", self._username),
+                    password=self.jump_host.get("password", self._password),
+                    key_filename=self.jump_host.get("ssh_key", self._key_filename),
+                    key_password=self.jump_host.get("ssh_key_password", self._key_password),
+                    jump_host=self.jump_host.get("jump_host", None),
+                )
+            try:
+                self._jump_host_connection.connect()
+                jump_host_sock = self._jump_host_connection.connection.get_transport().open_channel(
+                    'direct-tcpip', (self.address, self.port), ('', 0)
+                )
+                kwargs["sock"] = jump_host_sock
+            except ConnectionError as exc:
+                raise ConnectionError(f"Failed to open SSH connection to jump host "
+                                      f"{self._username}@{self.jump_host}:{self.port}: {exc}")
         logger.debug("KWARGS %s" % (kwargs,))
         try:
             connection.connect(self.address, timeout=30, **kwargs)
@@ -364,6 +388,8 @@ class SSHConnection(Connection):
 
     def close(self):
         self.connection.close()
+        if self._jump_host_connection:
+            self._jump_host_connection.close()
 
     def reopen(self, timeout=900):
         time_start = time.time()
@@ -488,6 +514,8 @@ def connection_from_opts(opts, login_dialog=None):
         method = opts['method']
 
     if method == 'ssh':
+        if "ssh_jump_host" in opts:
+            kwargs["jump_host"] = opts["ssh_jump_host"]
         return SSHConnection(**kwargs)
     elif method == 'telnet':
         return TelnetConnection(**kwargs)
