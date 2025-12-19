@@ -57,4 +57,4 @@ class TestSCPImageProvider(TestCase):
         image = provider.find_image("test.bin", version="1", platform="unknown")
         assert isinstance(image, NetworkImage)
         assert image.get_url() == "scp://localhost:22/path/test.bin"
-        provider.check_exists.assert_called_once_with('scp://localhost:22/path/test.bin')
+        provider.check_exists.assert_called_once_with(image)
