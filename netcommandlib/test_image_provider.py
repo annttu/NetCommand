@@ -6,7 +6,8 @@ from unittest.mock import patch
 import requests_mock
 
 from netcommandlib.image import HTTPImage, LocalImage, NetworkImage
-from netcommandlib.image_provider import HTTPSImageProvider, HTTPImageProvider, LocalImageProvider, SCPImageProvider
+from netcommandlib.image_provider import HTTPSImageProvider, HTTPImageProvider, LocalImageProvider, SCPImageProvider, \
+    CachingHTTPImageProvider
 
 
 class TestHTTPSImageProvider(TestCase):
@@ -58,3 +59,17 @@ class TestSCPImageProvider(TestCase):
         assert isinstance(image, NetworkImage)
         assert image.get_url() == "scp://localhost:22/path/test.bin"
         provider.check_exists.assert_called_once_with(image)
+
+
+class TestCachingHTTPImageProvider(TestCase):
+    def test_find_image(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            provider = CachingHTTPImageProvider(server="localhost", path="path", local_dir=tempdir, protocol="https")
+            with requests_mock.Mocker() as m:
+                m.head('https://localhost/path/test.bin', text='')
+                m.get('https://localhost/path/test.bin', text='test')
+                image = provider.find_image("test.bin", version="1", platform="unknown")
+            assert isinstance(image, LocalImage)
+            with image.as_bytes() as data:
+                assert data.read() == b"test"
+            assert os.path.exists(os.path.join(tempdir, "unknown-1-test.bin"))

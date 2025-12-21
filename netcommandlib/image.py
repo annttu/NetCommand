@@ -14,6 +14,9 @@ class LocalImage(GenericImage):
         self.path = path
         self.filename = os.path.basename(self.path)
 
+    def __str__(self):
+        return f"LocalImage {self.path}"
+
     def as_bytes(self):
         with open(self.path, 'rb') as f:
             buffer = io.BytesIO(f.read())
@@ -31,6 +34,9 @@ class NetworkImage(GenericImage):
         self.password = password
         self.port = port
         self.filename = os.path.basename(self.path)
+
+    def __str__(self):
+        return f"NetworkImage {self.get_url()}"
 
     def validate_protocol(self):
         return True

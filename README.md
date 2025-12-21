@@ -18,10 +18,7 @@ batch commands
 batch update
 ---
 
-Download update images to local "imagedir" and/or configure remote server in inventory.
-
-Image name format is defined per model but generally format is `{prefix}{model}-{platform}-{version}.suffix`.
-For example routeros-arm64-7.10.2.npk or os10-Enterprise-10.1.2.345.bin
+Start by setting up the sources section in inventory.yaml.
 
 
 ```shell
@@ -33,9 +30,9 @@ Environment variables
 
 Environment variables override values from inventory file.
 
-`SSH_KEY_PASSWORD` is used to open ssh key.
+`SSH_KEY_PASSWORD` is used to open the SSH key.
 
-`SSH_PASSWORD` is used while connecting to devices. Overrides opts.password variable.
+`SSH_PASSWORD` is used while connecting to devices. Overrides `opts.password` variable.
 
 Supported operating systems:
 ---
@@ -50,12 +47,56 @@ Supported operating systems:
 *  Dell OS10 upgrade downloads and installs the upgrade image but needs to be reloaded manually.
 
 
+Image providers
+---
+
+Image providers define sources for upgrade images. Inventory can define multiple providers.
+The First provider with a matching image is used. Different models support different providers as some operating systems
+don't support copying files from remote servers and other copying local files to the device over SSH.
+
+Local images are files in the device running NetCommand. Directory path is provided in the image provider name.
+User has to copy the files to the local directory manually.
+
+Image name format is defined per model but generally format is `{prefix}{model}-{platform}-{version}.suffix`.
+
+For example, routeros-arm64-7.10.2.npk or os10-Enterprise-10.1.2.345.bin
+
+Example definition
+
+```yaml
+sources:
+  ~/Downloads/images:
+    type: local
+```
+
+Network images are urls to files in remote servers. Currently supported methods are HTTP, HTTPS and SCP.
+
+Example definition
+
+```yaml
+sources:
+  http://example.com/images:
+    type: http
+```
+
+Caching image provider fetches remote files to a local directory and works as a local image provider to the remote device.
+
+Example definition
+
+```yaml
+sources:
+  download.mikrotik.com:
+    type: http_cache
+    path: "routeros/%(version)s"
+    local_dir: ~/Downloads/images
+```
+
 License
 =======
 
 The MIT License (MIT)
 
-Copyright (c) 2023 Antti Jaakkola
+Copyright (c) 2023-2025 Antti Jaakkola
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

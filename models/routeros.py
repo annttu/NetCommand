@@ -87,7 +87,7 @@ class RouterOS(Model):
             return None
 
     def get_supported_image_provider_types(self):
-        return ["local"]
+        return ["local", "http", "https"]
 
     def save_config(self, dry_run=False):
         """NOP configuration save"""

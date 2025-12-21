@@ -1,19 +1,21 @@
 import glob
 import logging
 import os
+from typing import Optional
 
 import requests as requests
 
 from netcommandlib.connection import SSHConnection
-from netcommandlib.image import LocalImage, NetworkImage, HTTPImage
+from netcommandlib.image import LocalImage, NetworkImage, HTTPImage, GenericImage
 
 logger = logging.getLogger("image_provider")
 
 
 class ImageProvider(object):
+    # type is used in models to determine which providers are supported
     type = "generic"
 
-    def find_image(self, filename, version, platform):
+    def find_image(self, filename, version, platform) -> Optional[GenericImage]:
         raise NotImplementedError()
 
 
@@ -49,7 +51,17 @@ class NetworkImageProvider(ImageProvider):
         self.protocol = protocol
 
     def __str__(self):
-        return f"NetworkImageProvider {self.protocol}://***@{self.server}:{self.port}/{self.path}/%(filename)s"
+        auth = ""
+        if self.username:
+            auth = f"{self.username}"
+        if self.password:
+            auth += f":***"
+        if auth:
+            auth += "@"
+        port = ""
+        if self.port:
+            port = f":{self.port}"
+        return f"NetworkImageProvider {self.protocol}://{auth}{self.server}{port}/{self.path}/%(filename)s"
 
     def _format_path(self, filename, version, platform):
         path = f"{self.path}/{filename}"
@@ -73,7 +85,7 @@ class NetworkImageProvider(ImageProvider):
     def check_exists(cls, image):
         raise NotImplementedError()
 
-    def find_image(self, filename, version, platform, **kwargs):
+    def find_image(self, filename, version, platform, **kwargs) -> Optional[NetworkImage]:
         img = self._get_image(filename, version, platform)
 
         if not self.check_exists(img):
@@ -150,9 +162,53 @@ class SCPImageProvider(NetworkImageProvider):
             return False
 
 
+class CachingHTTPImageProvider(ImageProvider):
+    type = "local"
+
+    def __init__(self, server, local_dir, path="", port=None, username=None, password=None, protocol="https"):
+        self.image_provider = HTTPImageProvider(
+            server=server,
+            path=path,
+            port=port,
+            username=username,
+            password=password,
+            protocol=protocol
+        )
+        self.local_dir = os.path.expanduser(local_dir)
+
+    def __str__(self):
+        result = str(self.image_provider)
+        return f"Caching {result}"
+
+    def find_image(self, filename, version, platform, **kwargs) -> Optional[LocalImage]:
+        if not platform:
+            platform = "unknown"
+        if not version:
+            version = "unknown"
+        local_file = os.path.join(self.local_dir, f"{platform}-{version}-{filename}")
+        if os.path.exists(local_file):
+            logger.debug(f"Using cached image {local_file}")
+            return LocalImage(path=local_file, version=version, platform=platform)
+        logger.debug(f"Downloading image to cache {local_file}")
+        image = self.image_provider.find_image(filename, version, platform)
+        if not image:
+            return None
+        if not os.path.isdir(self.local_dir):
+            os.makedirs(self.local_dir)
+        with open(local_file, "wb") as f:
+            with requests.get(image.get_url(), stream=True) as r:
+                while True:
+                    data = r.raw.read(1024*1024)
+                    if not data:
+                        break
+                    f.write(data)
+        return LocalImage(path=local_file, version=version, platform=platform)
+
+
 IMAGE_PROVIDERS = {
     "local": LocalImageProvider,
     "http": HTTPImageProvider,
     "https": HTTPSImageProvider,
     "scp": SCPImageProvider,
+    "http_cache": CachingHTTPImageProvider,
 }
