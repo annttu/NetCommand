@@ -68,9 +68,12 @@ def update(args, hostname, opts, image_providers, dry_run=False):
     image = None
     for image_provider in image_providers:
         if image_provider.type not in model.get_supported_image_provider_types():
+            logger.debug(f"Skipping unsupported image provider {image_provider}")
             continue
+        logger.debug(f"Checking image provider {image_provider} for {filename}")
         image = image_provider.find_image(filename, version=args.version, platform=platform)
         if image:
+            logger.debug(f"Found image {image}")
             break
 
     if not image:
@@ -84,8 +87,10 @@ def update(args, hostname, opts, image_providers, dry_run=False):
         for image_provider in image_providers:
             if image_provider.type not in model.get_supported_image_provider_types():
                 continue
+            logger.debug(f"Checking image provider {image_provider} for {extra_image_filename}")
             extra_image = image_provider.find_image(extra_image_filename, version=args.version, platform=platform)
             if extra_image:
+                logger.debug(f"Found image {extra_image}")
                 break
 
         if not extra_image:
@@ -219,6 +224,7 @@ def main():
             raise RuntimeError(f"Invalid image source type {source_type} on source {source_name}")
         del source_opts["type"]
         image_providers.append(IMAGE_PROVIDERS[source_type](source_name, **source_opts))
+        logger.debug(f"Image provider {source_name} registered")
 
     success = 0
     failed = 0

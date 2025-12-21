@@ -30,5 +30,10 @@ groups:
 sources:
   example.net:
     type: http
+    path: /images/
   ~/Downloads:
     type: local
+  download.mikrotik.com:
+    type: http_cache
+    path: "routeros/%(version)s"
+    local_dir: ~/Downloads/images

@@ -3,3 +3,5 @@
 !sample_inventory.yaml
 !requirements.txt
 !requirements-devel.txt
+env/
+venv/
