@@ -220,7 +220,7 @@ class RouterOS(Model):
 
         if compare_version(current_version, "7.12.0") < 0 and compare_version(image.version, "7.13.0") >= 0:
             # We need to update first to version 7.12.1 or 7.12.0 and continue then to >= 7.13.
-            raise RuntimeError("Please update first to version 12.1 and after that to later versions")
+            raise RuntimeError("Please update first to version 7.12.1 and after that to later versions")
 
         if isinstance(image, LocalImage):
             logger.info(
