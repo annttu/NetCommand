@@ -364,7 +364,7 @@ class SSHConnection(Connection):
         except socket.timeout as exc:
             raise ConnectionError(f"Failed top open SSH connection to "
                                   f"{self._username}@{self.address}:{self.port}: {exc}")
-        logger.debug("New SSH connection to %s@%:%d is now open", self._username, self.address, self.port)
+        logger.debug("New SSH connection to %s@%s:%d is now open", self._username, self.address, self.port)
         return connection
 
     def connect(self):
