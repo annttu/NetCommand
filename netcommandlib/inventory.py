@@ -1,7 +1,12 @@
 import functools
+import json
 import logging
+import subprocess
+from typing import Dict
 
 logger = logging.getLogger("inventory")
+OP_PATH = "/opt/homebrew/bin/op"
+
 
 def required(func):
     @functools.wraps(func)
@@ -53,6 +58,8 @@ JUMP_HOST_VALIDATORS={
     "hostname": string,
     "username": string,
     "password": string,
+    "op_item": string,
+    "op_account": string,
 }
 
 
@@ -65,6 +72,8 @@ OPTS_VALIDATORS={
     "ssh_key": string,
     "prompt": string,
     "ssh_jump_host": mapping(JUMP_HOST_VALIDATORS),
+    "op_item": string,
+    "op_account": string,
 }
 
 HOST_VALIDATORS={
@@ -72,9 +81,29 @@ HOST_VALIDATORS={
 }
 
 
+class OP(object):
+    @classmethod
+    def get_item(cls, item_id, account_id=None) -> Dict[str, str]:
+        args = [OP_PATH, "item", "get", item_id, "--reveal", "--format", "json"]
+        if account_id:
+            args.append("--account")
+            args.append(account_id)
+        logger.debug(f"Executing {' '.join(args)}")
+        try:
+            result = subprocess.run(args, check=True, capture_output=True)
+        except subprocess.CalledProcessError:
+            logger.error(f"1Password CLI returned an error, failed to get item {item_id}")
+            raise RuntimeError(f"failed to fetch 1password item {item_id}")
+        item = json.loads(result.stdout.decode("utf-8"))
+
+        fields = {}
+        for field in item["fields"]:
+            if 'value' in field:
+                fields[field["label"]] = field["value"]
+        return fields
+
 
 class Inventory(object):
-
     def __init__(self):
         self.hosts = {}
         self.groups = {}
@@ -91,6 +120,28 @@ class Inventory(object):
         return inv
 
     @classmethod
+    def _load_host(cls, host):
+        return cls._load_password(host)
+
+    @classmethod
+    def _load_opts(cls, host):
+        return cls._load_password(host)
+
+    @classmethod
+    def _load_password(cls, item):
+        op_item = item.get("op_item")
+        op_account = item.get("op_account")
+        if op_item:
+            op_item = OP.get_item(op_item, op_account)
+            if 'password' in op_item:
+                item["password"] = op_item["password"]
+                del item["op_item"]
+                del item["op_account"]
+            else:
+                raise ValueError(f"Failed to find password for op_item {op_item} op_account {op_account}")
+        return item
+
+    @classmethod
     def _load_group(cls, inventory, path=None, parent_opts=None):
         hosts = {"hosts": {}, "groups": {}}
         if not path:
@@ -100,6 +151,11 @@ class Inventory(object):
         opts = {}
         opts.update(parent_opts)
         opts.update(inventory.get("opts", {}))
+
+        opts = cls._load_opts(opts)
+
+        if 'ssh_jump_host' in opts:
+            cls._load_host(opts["ssh_jump_host"])
         for group_name, items in inventory.get("groups", {}).items():
             group_data = cls._load_group(items, path + [group_name], parent_opts=opts)
             hosts["hosts"].update(group_data["hosts"])
@@ -114,6 +170,7 @@ class Inventory(object):
             if 'hostname' not in host_items:
                 host_items["hostname"] = hostname
             host_items["groups"] = path
+            cls._load_host(host_items)
             hosts["hosts"][hostname] = host_items
         return hosts
 

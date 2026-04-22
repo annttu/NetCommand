@@ -14,7 +14,16 @@ groups:
         # password: password
         # or
         # ssh_key: filename
+        # or
+        # op_item: abc12123123123
+        # op_account: example.1password.eu
       username: operator
+      # password: password
+      # or
+      # ssh_key: filename
+      # or
+      # op_item: abc12123123123
+      # op_account: example.1password.eu
     hosts:
       switch2:
         hostname: 192.168.1.2
